@@ -22,8 +22,18 @@ The Claude CLI provider allows you to use your local Claude Code installation as
    ```bash
    export CLAUDE_CLI_COMMAND="/path/to/claude"
    ```
+   
+   For MCP server usage, you can use the full path with flags:
+   ```bash
+   export CLAUDE_CLI_COMMAND="/home/user/.claude/local/claude --model opus -p --dangerously-skip-permissions"
+   ```
 
-3. **Configure Task Master** to use claude-cli as a provider:
+3. **Optional: Enable file reference mode** (recommended for large PRDs):
+   ```bash
+   export CLAUDE_CLI_USE_FILE_REFERENCE="true"
+   ```
+
+4. **Configure Task Master** to use claude-cli as a provider:
    ```bash
    task-master models --setup
    ```
@@ -40,26 +50,37 @@ In your `.taskmaster/config.json` or `.taskmasterconfig`:
     "main": {
       "provider": "claude-cli",
       "modelId": "claude-local",
-      "maxTokens": 64000,
+      "maxTokens": 200000,
       "temperature": 0.2
     }
   }
 }
 ```
 
-## Limitations
+## Features and Limitations
 
+### Features
+- **Object generation support**: Through automatic conversion to JSON prompts
+- **Large input handling**: Uses temporary files for prompts exceeding shell limits
+- **File reference mode**: Can reference files instead of including full content
+- **Configurable timeout**: Default 5 minutes, adjustable per request
+- **Automatic flag handling**: Adds `-p` or `--print` flag if not present
+
+### Limitations
 - **No streaming support**: The CLI provider doesn't support streaming responses
-- **No object generation**: Structured output generation is not supported
 - **No token usage tracking**: The CLI doesn't provide token usage information
 - **Print mode only**: Uses Claude's print mode (`-p` flag) for automation
+- **Response buffer limit**: 10MB maximum response size
 
 ## How It Works
 
 The Claude CLI provider:
 1. Formats your messages into a prompt
-2. Executes the Claude CLI with the `-p` (print mode) flag
-3. Returns the response as text
+2. Writes the prompt to a temporary file (to handle large inputs)
+3. Executes the Claude CLI with input redirection: `claude -p < /tmp/prompt.txt`
+4. Parses the response (handling JSON for object generation requests)
+5. Cleans up the temporary file
+6. Returns the response
 
 ## Troubleshooting
 
@@ -68,18 +89,33 @@ If you get a "command not found" error, ensure:
 - Claude Code is installed
 - The `CLAUDE_CLI_COMMAND` environment variable is set correctly
 - The command is in your PATH or use an absolute path
+- The Claude executable has execute permissions
 
 ### No response
 If Claude doesn't respond:
 - Check that Claude Code is activated and logged in
 - Try running the command manually: `claude -p "Hello"`
 - Ensure you have an active Claude subscription
+- Check if the process is timing out (default 5 minutes)
+
+### Timeout errors
+If operations time out:
+- The default timeout is 5 minutes
+- For long operations, you may need to increase the timeout
+- Check if Claude is actually processing or stuck
+
+### JSON parsing errors
+If you see JSON parsing errors:
+- The claude-cli-adapter converts object generation to text prompts
+- Ensure Claude is returning valid JSON when requested
+- Check logs at `logs/mcp-server.log` for details
 
 ### Large responses
 The provider sets a 10MB buffer limit for responses. Very large responses may be truncated.
 
 ## Example Usage
 
+### Basic CLI Usage
 ```bash
 # Set up the environment
 export CLAUDE_CLI_COMMAND="claude"
@@ -91,4 +127,37 @@ task-master models --setup
 # Use Task Master normally
 task-master parse-prd my-project.txt
 task-master expand task-001
+```
+
+### MCP Server Usage with Claude Desktop
+```json
+// In Claude Desktop's MCP settings:
+{
+  "mcpServers": {
+    "task-master": {
+      "command": "node",
+      "args": ["/path/to/task-master/mcp-server/server.js"],
+      "cwd": "/path/to/your/project",
+      "env": {
+        "CLAUDE_CLI_COMMAND": "/home/user/.claude/local/claude --model opus -p --dangerously-skip-permissions",
+        "CLAUDE_CLI_USE_FILE_REFERENCE": "true"
+      }
+    }
+  }
+}
+```
+
+### Debugging
+```bash
+# Enable debug file logging
+export TASK_MASTER_DEBUG_LOGGING="true"
+
+# Enable file reference mode for large PRDs
+export CLAUDE_CLI_USE_FILE_REFERENCE="true"
+
+# Check logs (only created when debug logging is enabled)
+tail -f logs/mcp-server.log
+
+# Test Claude CLI directly
+echo "Hello, Claude" | claude -p
 ```

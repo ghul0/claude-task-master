@@ -490,17 +490,20 @@ function createErrorResponse(errorMessage) {
  * @returns {Object} - The logger wrapper object.
  */
 function createLogWrapper(log) {
-	// Create a file logger that also calls the original logger
-	const fileLog = createFileLogger(log);
+	// Only enable file logging when using Claude CLI provider
+	const useFileLogging = process.env.CLAUDE_CLI_COMMAND || process.env.TASK_MASTER_DEBUG_LOGGING;
+	const logger = useFileLogging ? createFileLogger(log) : log;
 	
 	return {
-		info: (message, ...args) => fileLog.info(message, ...args),
-		warn: (message, ...args) => fileLog.warn(message, ...args),
-		error: (message, ...args) => fileLog.error(message, ...args),
+		info: (message, ...args) => logger.info(message, ...args),
+		warn: (message, ...args) => logger.warn(message, ...args),
+		error: (message, ...args) => logger.error(message, ...args),
 		// Handle optional debug method
-		debug: (message, ...args) => fileLog.debug(message, ...args),
+		debug: (message, ...args) =>
+			logger.debug ? logger.debug(message, ...args) : null,
 		// Map success to info as a common fallback
-		success: (message, ...args) => fileLog.success(message, ...args)
+		success: (message, ...args) => 
+			logger.success ? logger.success(message, ...args) : logger.info(message, ...args)
 	};
 }
 

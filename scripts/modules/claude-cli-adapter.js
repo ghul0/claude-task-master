@@ -33,10 +33,6 @@ export async function generateObjectWithFallback(params) {
         if (provider === 'claude-cli') {
             log('info', '[CLAUDE-CLI-ADAPTER] Using text generation fallback for claude-cli provider');
             
-            // Also log to file
-            const { createFileLogger } = await import('../../mcp-server/src/file-logger.js');
-            const fileLog = createFileLogger(log);
-            fileLog.info('[CLAUDE-CLI-ADAPTER] Provider detected as claude-cli, using text generation fallback');
             
             // Create a modified prompt that asks for JSON output
             const jsonPrompt = `${prompt}
@@ -46,8 +42,6 @@ ${JSON.stringify(schema, null, 2)}
 
 Respond ONLY with the JSON object, no explanation or markdown formatting.`;
 
-            fileLog.info('[CLAUDE-CLI-ADAPTER] About to call generateTextService');
-            fileLog.info(`[CLAUDE-CLI-ADAPTER] JSON prompt length: ${jsonPrompt.length}`);
             
             // Use generateTextService instead
             const textResult = await generateTextService({
@@ -61,7 +55,6 @@ Respond ONLY with the JSON object, no explanation or markdown formatting.`;
             });
             
             // Check if we got a valid result
-            fileLog.info(`[CLAUDE-CLI-ADAPTER] textResult structure: ${JSON.stringify(Object.keys(textResult || {}))}`);
             
             // Handle different result structures
             let textContent = '';
@@ -75,7 +68,6 @@ Respond ONLY with the JSON object, no explanation or markdown formatting.`;
             } else {
                 log('error', '[CLAUDE-CLI-ADAPTER] No text result from Claude CLI');
                 log('error', `[CLAUDE-CLI-ADAPTER] textResult: ${JSON.stringify(textResult)}`);
-                fileLog.error(`[CLAUDE-CLI-ADAPTER] Full textResult structure: ${JSON.stringify(textResult, null, 2)}`);
                 throw new Error('Claude CLI returned no output. It may still have issues with non-interactive mode.');
             }
             

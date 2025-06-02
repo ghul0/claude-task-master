@@ -15,7 +15,6 @@ import { createLogWrapper } from '../../tools/utils.js';
 import { getDefaultNumTasks } from '../../../../scripts/modules/config-manager.js';
 import { resolvePrdPath, resolveProjectPath } from '../utils/path-utils.js';
 import { TASKMASTER_TASKS_FILE } from '../../../../src/constants/paths.js';
-import { createFileLogger } from '../../file-logger.js';
 
 /**
  * Direct function wrapper for parsing PRD documents and generating tasks.
@@ -30,13 +29,6 @@ export async function parsePRDDirect(args, log, context = {}) {
 	
 	// Create the standard logger wrapper first for logging
 	const logWrapper = createLogWrapper(log);
-	const fileLog = createFileLogger(log);
-	
-	// Log incoming args for debugging
-	fileLog.info(`[PARSE-PRD-DIRECT] Called with args: ${JSON.stringify(args)}`);
-	fileLog.info(`[PARSE-PRD-DIRECT] Context: ${JSON.stringify(context)}`);
-	logWrapper.info(`[PARSE-PRD-DIRECT] Called with args: ${JSON.stringify(args)}`);
-	logWrapper.info(`[PARSE-PRD-DIRECT] Context: ${JSON.stringify(context)}`);
 	
 	// Extract projectRoot from args
 	const {
