@@ -276,9 +276,7 @@ function getModelConfigForRole(role, explicitRoot = null) {
 }
 
 function getMainProvider(explicitRoot = null) {
-	const provider = getModelConfigForRole('main', explicitRoot).provider;
-	log('info', `[CONFIG] getMainProvider returning: ${provider} (explicitRoot: ${explicitRoot})`);
-	return provider;
+	return getModelConfigForRole('main', explicitRoot).provider;
 }
 
 function getMainModelId(explicitRoot = null) {
