@@ -29,7 +29,6 @@ import { registerRemoveTaskTool } from './remove-task.js';
 import { registerInitializeProjectTool } from './initialize-project.js';
 import { registerModelsTool } from './models.js';
 import { registerMoveTaskTool } from './move-task.js';
-import { registerTestTool } from './test-tool.js';
 
 /**
  * Register all Task Master tools with the MCP server
@@ -37,9 +36,6 @@ import { registerTestTool } from './test-tool.js';
  */
 export function registerTaskMasterTools(server) {
 	try {
-		// Register test tool first
-		registerTestTool(server);
-		
 		// Register each tool in a logical workflow order
 
 		// Group 1: Initialization & Setup
