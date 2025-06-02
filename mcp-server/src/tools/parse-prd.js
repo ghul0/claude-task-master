@@ -68,7 +68,7 @@ export function registerParsePRDTool(server) {
 				return handleApiResult(result, log);
 			} catch (error) {
 				log.error(`Error in parse_prd: ${error.message}`);
-				throw error;
+				return createErrorResponse(`Failed to parse PRD: ${error.message}`);
 			}
 		})
 	});

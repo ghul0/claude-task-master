@@ -209,15 +209,7 @@ function handleApiResult(
 		const errorMsg = result.error?.message || `Unknown ${errorPrefix}`;
 		// Include cache status in error logs
 		log.error(`${errorPrefix}: ${errorMsg}. From cache: ${result.fromCache}`); // Keep logging cache status on error
-		// Return a proper error response that MCP can handle
-		return {
-			content: [
-				{
-					type: 'text',
-					text: errorMsg
-				}
-			]
-		};
+		return createErrorResponse(errorMsg);
 	}
 
 	// Process the result data if needed
