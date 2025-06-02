@@ -26,10 +26,6 @@ import { TASKMASTER_TASKS_FILE } from '../../../../src/constants/paths.js';
  */
 export async function parsePRDDirect(args, log, context = {}) {
 	const { session } = context;
-	
-	// Create the standard logger wrapper first for logging
-	const logWrapper = createLogWrapper(log);
-	
 	// Extract projectRoot from args
 	const {
 		input: inputArg,
@@ -40,6 +36,9 @@ export async function parsePRDDirect(args, log, context = {}) {
 		research,
 		projectRoot
 	} = args;
+
+	// Create the standard logger wrapper
+	const logWrapper = createLogWrapper(log);
 
 	// --- Input Validation and Path Resolution ---
 	if (!projectRoot) {
@@ -135,18 +134,15 @@ export async function parsePRDDirect(args, log, context = {}) {
 	}
 
 	logWrapper.info(
-		`[PARSE-PRD] Parsing PRD via direct function. Input: ${inputPath}, Output: ${outputPath}, NumTasks: ${numTasks}, Force: ${force}, Append: ${append}, Research: ${research}, ProjectRoot: ${projectRoot}`
+		`Parsing PRD via direct function. Input: ${inputPath}, Output: ${outputPath}, NumTasks: ${numTasks}, Force: ${force}, Append: ${append}, Research: ${research}, ProjectRoot: ${projectRoot}`
 	);
 
 	const wasSilent = isSilentMode();
 	if (!wasSilent) {
-		logWrapper.info('[PARSE-PRD] Enabling silent mode');
 		enableSilentMode();
 	}
 
 	try {
-		logWrapper.info('[PARSE-PRD] Calling core parsePRD function...');
-		
 		// Call the core parsePRD function
 		const result = await parsePRD(
 			inputPath,
@@ -164,8 +160,6 @@ export async function parsePRDDirect(args, log, context = {}) {
 			},
 			'json'
 		);
-
-		logWrapper.info(`[PARSE-PRD] Core function returned: ${JSON.stringify(result)}`);
 
 		// Adjust check for the new return structure
 		if (result && result.success) {
@@ -195,9 +189,7 @@ export async function parsePRDDirect(args, log, context = {}) {
 			};
 		}
 	} catch (error) {
-		logWrapper.error(`[PARSE-PRD] Error executing core parsePRD: ${error.message}`);
-		logWrapper.error(`[PARSE-PRD] Error stack: ${error.stack}`);
-		logWrapper.error(`[PARSE-PRD] Error details: ${JSON.stringify(error)}`);
+		logWrapper.error(`Error executing core parsePRD: ${error.message}`);
 		return {
 			success: false,
 			error: {
