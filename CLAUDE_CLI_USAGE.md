@@ -149,15 +149,12 @@ task-master expand task-001
 
 ### Debugging
 ```bash
-# Enable debug file logging
-export TASK_MASTER_DEBUG_LOGGING="true"
-
 # Enable file reference mode for large PRDs
 export CLAUDE_CLI_USE_FILE_REFERENCE="true"
 
-# Check logs (only created when debug logging is enabled)
-tail -f logs/mcp-server.log
-
 # Test Claude CLI directly
 echo "Hello, Claude" | claude -p
+
+# Check Claude CLI version
+claude --version
 ```

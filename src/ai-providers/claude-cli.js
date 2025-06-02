@@ -64,33 +64,18 @@ export class ClaudeCliAIProvider extends BaseAIProvider {
 	 * @private
 	 */
 	async executeClaudeCli(input) {
-		// Only use file logging if debug logging is enabled
-		let fileLog = null;
-		const enableFileLogging = process.env.TASK_MASTER_DEBUG_LOGGING === 'true';
-		
-		if (enableFileLogging) {
-			const { createFileLogger } = await import('../../mcp-server/src/file-logger.js');
-			fileLog = createFileLogger(console);
-		}
-		
-		// Helper to log to both console and file (if enabled)
-		const debugLog = (level, message) => {
-			log(level, message);
-			if (fileLog) fileLog[level](message);
-		};
-		
 		let command = this.getClaudeCommand();
-		debugLog('info', '[CLAUDE-CLI] executeClaudeCli called');
-		debugLog('info', `[CLAUDE-CLI] CLAUDE_CLI_COMMAND = ${command || 'NOT SET'}`);
+		log('info', '[CLAUDE-CLI] executeClaudeCli called');
+		log('info', `[CLAUDE-CLI] CLAUDE_CLI_COMMAND = ${command || 'NOT SET'}`);
 		
 		if (!command) {
-			debugLog('error', '[CLAUDE-CLI] CLAUDE_CLI_COMMAND environment variable is not set');
+			log('error', '[CLAUDE-CLI] CLAUDE_CLI_COMMAND environment variable is not set');
 			throw new Error('CLAUDE_CLI_COMMAND environment variable is not set');
 		}
 		
 		// Check if we should use file reference mode
 		const useFileReference = resolveEnvVariable('CLAUDE_CLI_USE_FILE_REFERENCE') === 'true';
-		debugLog('info', `[CLAUDE-CLI] CLAUDE_CLI_USE_FILE_REFERENCE = ${useFileReference}`);
+		log('info', `[CLAUDE-CLI] CLAUDE_CLI_USE_FILE_REFERENCE = ${useFileReference}`);
 		
 		// Check if input contains file path marker
 		let actualInput = input;
@@ -99,44 +84,44 @@ export class ClaudeCliAIProvider extends BaseAIProvider {
 			const filePathMatch = input.match(/PRD_FILE_PATH:\s*([^\n]+)/);
 			if (filePathMatch) {
 				const filePath = filePathMatch[1].trim();
-				debugLog('info', `[CLAUDE-CLI] File reference mode: Detected file path: ${filePath}`);
+				log('info', `[CLAUDE-CLI] File reference mode: Detected file path: ${filePath}`);
 				
 				// Replace the PRD content with a file reference
 				actualInput = input.replace(/Product Requirements Document \(PRD\) Content:[\s\S]*?(?=\n\nIMPORTANT:|$)/, 
 					`Product Requirements Document (PRD) Content:\n<Please read the PRD from this file: ${filePath}>`);
 				
-				debugLog('info', `[CLAUDE-CLI] Replaced PRD content with file reference`);
-				debugLog('info', `[CLAUDE-CLI] New input length: ${actualInput.length} (was ${input.length})`);
+				log('info', `[CLAUDE-CLI] Replaced PRD content with file reference`);
+				log('info', `[CLAUDE-CLI] New input length: ${actualInput.length} (was ${input.length})`);
 			}
 		}
 		
 		// Add -p flag if not already present (required for piped input)
 		if (!command.includes(' -p') && !command.includes('--print')) {
-			debugLog('info', '[CLAUDE-CLI] Adding -p flag to command');
+			log('info', '[CLAUDE-CLI] Adding -p flag to command');
 			command += ' -p';
 		}
 		
 		// Validate the command exists
 		const claudePath = command.split(' ')[0];
-		debugLog('info', `[CLAUDE-CLI] Checking if Claude CLI exists at: ${claudePath}`);
+		log('info', `[CLAUDE-CLI] Checking if Claude CLI exists at: ${claudePath}`);
 		
 		try {
 			await execAsync(`test -f "${claudePath}" && test -x "${claudePath}"`);
-			debugLog('info', '[CLAUDE-CLI] Claude CLI found and is executable');
+			log('info', '[CLAUDE-CLI] Claude CLI found and is executable');
 		} catch (error) {
-			debugLog('error', `[CLAUDE-CLI] Claude CLI not found or not executable at: ${claudePath}`);
+			log('error', `[CLAUDE-CLI] Claude CLI not found or not executable at: ${claudePath}`);
 			throw new Error(`Claude CLI not found or not executable at: ${claudePath}. Please check your CLAUDE_CLI_COMMAND environment variable.`);
 		}
 		
-		debugLog('info', `[CLAUDE-CLI] Final command: ${command}`);
+		log('info', `[CLAUDE-CLI] Final command: ${command}`);
 		log('info', `[CLAUDE-CLI] Input length: ${actualInput.length} characters`);
 		log('debug', `[CLAUDE-CLI] Input preview: ${actualInput.substring(0, 200)}...`);
 		
 		let tempFile;
 		try {
-			debugLog('info', '[CLAUDE-CLI] About to execute command...');
-			debugLog('info', `[CLAUDE-CLI] Command: ${command}`);
-			debugLog('info', `[CLAUDE-CLI] Input: ${actualInput.substring(0, 500)}...`);
+			log('info', '[CLAUDE-CLI] About to execute command...');
+			log('info', `[CLAUDE-CLI] Command: ${command}`);
+			log('info', `[CLAUDE-CLI] Input: ${actualInput.substring(0, 500)}...`);
 			const startTime = Date.now();
 			
 			// For file reference mode, include the full PRD content in the prompt
@@ -146,7 +131,7 @@ export class ClaudeCliAIProvider extends BaseAIProvider {
 				const filePathMatch = actualInput.match(/<Please read the PRD from this file:\s*([^>]+)>/);
 				if (filePathMatch) {
 					const prdFilePath = filePathMatch[1].trim();
-					debugLog('info', `[CLAUDE-CLI] Reading PRD content from: ${prdFilePath}`);
+					log('info', `[CLAUDE-CLI] Reading PRD content from: ${prdFilePath}`);
 					
 					try {
 						const { readFileSync } = await import('fs');
@@ -155,9 +140,9 @@ export class ClaudeCliAIProvider extends BaseAIProvider {
 							/<Please read the PRD from this file:\s*[^>]+>/,
 							prdContent
 						);
-						debugLog('info', `[CLAUDE-CLI] Included PRD content, new length: ${finalInput.length}`);
+						log('info', `[CLAUDE-CLI] Included PRD content, new length: ${finalInput.length}`);
 					} catch (readError) {
-						debugLog('error', `[CLAUDE-CLI] Failed to read PRD file: ${readError.message}`);
+						log('error', `[CLAUDE-CLI] Failed to read PRD file: ${readError.message}`);
 						// Continue with file reference if read fails
 					}
 				}
@@ -169,16 +154,16 @@ export class ClaudeCliAIProvider extends BaseAIProvider {
 			const { join } = await import('path');
 			tempFile = join(tmpdir(), `claude-prompt-${Date.now()}.txt`);
 			
-			debugLog('info', `[CLAUDE-CLI] Writing prompt to temporary file: ${tempFile}`);
+			log('info', `[CLAUDE-CLI] Writing prompt to temporary file: ${tempFile}`);
 			writeFileSync(tempFile, finalInput, 'utf8');
 			
 			// Use the temporary file as input
 			const fullCommand = `${command} < ${tempFile}`;
-			debugLog('info', `[CLAUDE-CLI] Using temporary file for input`);
+			log('info', `[CLAUDE-CLI] Using temporary file for input`);
 			
 			// Add timeout to prevent hanging
 			const timeout = 300000; // 5 minutes timeout (increased for Claude processing)
-			debugLog('info', `[CLAUDE-CLI] Setting execution timeout to ${timeout}ms`);
+			log('info', `[CLAUDE-CLI] Setting execution timeout to ${timeout}ms`);
 			
 			let stdout, stderr;
 			try {
@@ -209,28 +194,28 @@ export class ClaudeCliAIProvider extends BaseAIProvider {
 				
 				// Check for other specific error codes
 				if (execError.code) {
-					fileLog.error(`[CLAUDE-CLI] Error code: ${execError.code}`);
+					log('error', `[CLAUDE-CLI] Error code: ${execError.code}`);
 				}
 				
 				throw new Error(`Claude CLI execution failed: ${execError.message}`);
 			}
 			
 			const duration = Date.now() - startTime;
-			debugLog('info', `[CLAUDE-CLI] Command completed in ${duration}ms`);
+			log('info', `[CLAUDE-CLI] Command completed in ${duration}ms`);
 			
 			if (stderr) {
-				debugLog('warn', `[CLAUDE-CLI] stderr: ${stderr}`);
+				log('warn', `[CLAUDE-CLI] stderr: ${stderr}`);
 			}
 			
-			debugLog('info', `[CLAUDE-CLI] stdout length: ${stdout ? stdout.length : 0} characters`);
+			log('info', `[CLAUDE-CLI] stdout length: ${stdout ? stdout.length : 0} characters`);
 			
 			if (!stdout || stdout.length === 0) {
-				debugLog('error', '[CLAUDE-CLI] No output received from Claude CLI');
+				log('error', '[CLAUDE-CLI] No output received from Claude CLI');
 				throw new Error('Claude CLI returned no output. The command may not support non-interactive mode.');
 			}
 			
 			// Log more of stdout for debugging
-			debugLog('info', `[CLAUDE-CLI] stdout preview: ${stdout.substring(0, 500)}...`);
+			log('info', `[CLAUDE-CLI] stdout preview: ${stdout.substring(0, 500)}...`);
 			
 			return stdout;
 		} catch (error) {
@@ -251,10 +236,10 @@ export class ClaudeCliAIProvider extends BaseAIProvider {
 			if (tempFile) {
 				try {
 					const { unlinkSync } = await import('fs');
-					debugLog('info', `[CLAUDE-CLI] Cleaning up temporary file: ${tempFile}`);
+					log('info', `[CLAUDE-CLI] Cleaning up temporary file: ${tempFile}`);
 					unlinkSync(tempFile);
 				} catch (cleanupError) {
-					debugLog('warn', `[CLAUDE-CLI] Failed to clean up temp file: ${cleanupError.message}`);
+					log('warn', `[CLAUDE-CLI] Failed to clean up temp file: ${cleanupError.message}`);
 				}
 			}
 		}

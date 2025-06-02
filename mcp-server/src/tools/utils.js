@@ -7,7 +7,6 @@ import { spawnSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { contextManager } from '../core/context-manager.js'; // Import the singleton
-import { createFileLogger } from '../file-logger.js';
 
 // Import path utilities to ensure consistent path resolution
 import {
@@ -490,20 +489,15 @@ function createErrorResponse(errorMessage) {
  * @returns {Object} - The logger wrapper object.
  */
 function createLogWrapper(log) {
-	// Only enable file logging when using Claude CLI provider
-	const useFileLogging = process.env.CLAUDE_CLI_COMMAND || process.env.TASK_MASTER_DEBUG_LOGGING;
-	const logger = useFileLogging ? createFileLogger(log) : log;
-	
 	return {
-		info: (message, ...args) => logger.info(message, ...args),
-		warn: (message, ...args) => logger.warn(message, ...args),
-		error: (message, ...args) => logger.error(message, ...args),
+		info: (message, ...args) => log.info(message, ...args),
+		warn: (message, ...args) => log.warn(message, ...args),
+		error: (message, ...args) => log.error(message, ...args),
 		// Handle optional debug method
 		debug: (message, ...args) =>
-			logger.debug ? logger.debug(message, ...args) : null,
+			log.debug ? log.debug(message, ...args) : null,
 		// Map success to info as a common fallback
-		success: (message, ...args) => 
-			logger.success ? logger.success(message, ...args) : logger.info(message, ...args)
+		success: (message, ...args) => log.info(message, ...args)
 	};
 }
 
