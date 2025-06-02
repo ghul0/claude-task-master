@@ -15,6 +15,7 @@ import {
 	TASKMASTER_DOCS_DIR,
 	TASKMASTER_TASKS_FILE
 } from '../../../src/constants/paths.js';
+import { createFileLogger } from '../file-logger.js';
 
 /**
  * Register the parse_prd tool
@@ -63,12 +64,43 @@ export function registerParsePRDTool(server) {
 				.describe('Append generated tasks to existing file.')
 		}),
 		execute: withNormalizedProjectRoot(async (args, { log, session }) => {
+			// Create file logger
+			const fileLog = createFileLogger(log);
+			
+			// Create a debug info array to collect diagnostic information
+			const debugInfo = [];
+			
 			try {
+				debugInfo.push(`Args: ${JSON.stringify(args)}`);
+				debugInfo.push(`Session: ${session ? 'Present' : 'Not present'}`);
+				debugInfo.push(`CLAUDE_CLI_COMMAND: ${process.env.CLAUDE_CLI_COMMAND || 'NOT SET'}`);
+				
+				fileLog.info(`[PARSE-PRD-TOOL] Execute called with args: ${JSON.stringify(args)}`);
+				fileLog.info(`[PARSE-PRD-TOOL] Session: ${session ? 'Present' : 'Not present'}`);
+				fileLog.info(`[PARSE-PRD-TOOL] CLAUDE_CLI_COMMAND: ${process.env.CLAUDE_CLI_COMMAND || 'NOT SET'}`);
+				
+				debugInfo.push('About to call parsePRDDirect...');
+				fileLog.info('[PARSE-PRD-TOOL] About to call parsePRDDirect...');
+				
 				const result = await parsePRDDirect(args, log, { session });
+				
+				debugInfo.push(`parsePRDDirect returned: ${JSON.stringify(result)}`);
+				fileLog.info(`[PARSE-PRD-TOOL] parsePRDDirect returned: ${JSON.stringify(result)}`);
+				
 				return handleApiResult(result, log);
 			} catch (error) {
-				log.error(`Error in parse_prd: ${error.message}`);
-				return createErrorResponse(`Failed to parse PRD: ${error.message}`);
+				fileLog.error(`[PARSE-PRD-TOOL] Error in parse_prd: ${error.message}`);
+				fileLog.error(`[PARSE-PRD-TOOL] Error stack: ${error.stack}`);
+				
+				// Return error with debug info
+				return {
+					content: [
+						{
+							type: 'text',
+							text: `Parse PRD failed with error: ${error.message}\n\nDebug Info:\n${debugInfo.join('\n')}\n\nError Stack:\n${error.stack}`
+						}
+					]
+				};
 			}
 		})
 	});

@@ -15,6 +15,7 @@ import { createLogWrapper } from '../../tools/utils.js';
 import { getDefaultNumTasks } from '../../../../scripts/modules/config-manager.js';
 import { resolvePrdPath, resolveProjectPath } from '../utils/path-utils.js';
 import { TASKMASTER_TASKS_FILE } from '../../../../src/constants/paths.js';
+import { createFileLogger } from '../../file-logger.js';
 
 /**
  * Direct function wrapper for parsing PRD documents and generating tasks.
@@ -26,6 +27,17 @@ import { TASKMASTER_TASKS_FILE } from '../../../../src/constants/paths.js';
  */
 export async function parsePRDDirect(args, log, context = {}) {
 	const { session } = context;
+	
+	// Create the standard logger wrapper first for logging
+	const logWrapper = createLogWrapper(log);
+	const fileLog = createFileLogger(log);
+	
+	// Log incoming args for debugging
+	fileLog.info(`[PARSE-PRD-DIRECT] Called with args: ${JSON.stringify(args)}`);
+	fileLog.info(`[PARSE-PRD-DIRECT] Context: ${JSON.stringify(context)}`);
+	logWrapper.info(`[PARSE-PRD-DIRECT] Called with args: ${JSON.stringify(args)}`);
+	logWrapper.info(`[PARSE-PRD-DIRECT] Context: ${JSON.stringify(context)}`);
+	
 	// Extract projectRoot from args
 	const {
 		input: inputArg,
@@ -36,9 +48,6 @@ export async function parsePRDDirect(args, log, context = {}) {
 		research,
 		projectRoot
 	} = args;
-
-	// Create the standard logger wrapper
-	const logWrapper = createLogWrapper(log);
 
 	// --- Input Validation and Path Resolution ---
 	if (!projectRoot) {
@@ -77,7 +86,7 @@ export async function parsePRDDirect(args, log, context = {}) {
 		? path.isAbsolute(outputArg)
 			? outputArg
 			: path.resolve(projectRoot, outputArg)
-		: resolveProjectPath(TASKMASTER_TASKS_FILE, session) ||
+		: resolveProjectPath(TASKMASTER_TASKS_FILE, args) ||
 			path.resolve(projectRoot, TASKMASTER_TASKS_FILE);
 
 	// Check if input file exists
@@ -134,15 +143,18 @@ export async function parsePRDDirect(args, log, context = {}) {
 	}
 
 	logWrapper.info(
-		`Parsing PRD via direct function. Input: ${inputPath}, Output: ${outputPath}, NumTasks: ${numTasks}, Force: ${force}, Append: ${append}, Research: ${research}, ProjectRoot: ${projectRoot}`
+		`[PARSE-PRD] Parsing PRD via direct function. Input: ${inputPath}, Output: ${outputPath}, NumTasks: ${numTasks}, Force: ${force}, Append: ${append}, Research: ${research}, ProjectRoot: ${projectRoot}`
 	);
 
 	const wasSilent = isSilentMode();
 	if (!wasSilent) {
+		logWrapper.info('[PARSE-PRD] Enabling silent mode');
 		enableSilentMode();
 	}
 
 	try {
+		logWrapper.info('[PARSE-PRD] Calling core parsePRD function...');
+		
 		// Call the core parsePRD function
 		const result = await parsePRD(
 			inputPath,
@@ -160,6 +172,8 @@ export async function parsePRDDirect(args, log, context = {}) {
 			},
 			'json'
 		);
+
+		logWrapper.info(`[PARSE-PRD] Core function returned: ${JSON.stringify(result)}`);
 
 		// Adjust check for the new return structure
 		if (result && result.success) {
@@ -189,7 +203,9 @@ export async function parsePRDDirect(args, log, context = {}) {
 			};
 		}
 	} catch (error) {
-		logWrapper.error(`Error executing core parsePRD: ${error.message}`);
+		logWrapper.error(`[PARSE-PRD] Error executing core parsePRD: ${error.message}`);
+		logWrapper.error(`[PARSE-PRD] Error stack: ${error.stack}`);
+		logWrapper.error(`[PARSE-PRD] Error details: ${JSON.stringify(error)}`);
 		return {
 			success: false,
 			error: {

@@ -7,6 +7,7 @@ import { spawnSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { contextManager } from '../core/context-manager.js'; // Import the singleton
+import { createFileLogger } from '../file-logger.js';
 
 // Import path utilities to ensure consistent path resolution
 import {
@@ -209,7 +210,15 @@ function handleApiResult(
 		const errorMsg = result.error?.message || `Unknown ${errorPrefix}`;
 		// Include cache status in error logs
 		log.error(`${errorPrefix}: ${errorMsg}. From cache: ${result.fromCache}`); // Keep logging cache status on error
-		return createErrorResponse(errorMsg);
+		// Return a proper error response that MCP can handle
+		return {
+			content: [
+				{
+					type: 'text',
+					text: errorMsg
+				}
+			]
+		};
 	}
 
 	// Process the result data if needed
@@ -481,15 +490,17 @@ function createErrorResponse(errorMessage) {
  * @returns {Object} - The logger wrapper object.
  */
 function createLogWrapper(log) {
+	// Create a file logger that also calls the original logger
+	const fileLog = createFileLogger(log);
+	
 	return {
-		info: (message, ...args) => log.info(message, ...args),
-		warn: (message, ...args) => log.warn(message, ...args),
-		error: (message, ...args) => log.error(message, ...args),
+		info: (message, ...args) => fileLog.info(message, ...args),
+		warn: (message, ...args) => fileLog.warn(message, ...args),
+		error: (message, ...args) => fileLog.error(message, ...args),
 		// Handle optional debug method
-		debug: (message, ...args) =>
-			log.debug ? log.debug(message, ...args) : null,
+		debug: (message, ...args) => fileLog.debug(message, ...args),
 		// Map success to info as a common fallback
-		success: (message, ...args) => log.info(message, ...args)
+		success: (message, ...args) => fileLog.success(message, ...args)
 	};
 }
 
