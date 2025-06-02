@@ -15,6 +15,7 @@ import {
 } from '../utils.js';
 
 import { generateObjectService } from '../ai-services-unified.js';
+import { generateObjectWithFallback } from '../claude-cli-adapter.js';
 import { getDebugFlag } from '../config-manager.js';
 import generateTaskFiles from './generate-task-files.js';
 import { displayAiUsageSummary } from '../ui.js';
@@ -200,7 +201,15 @@ Guidelines:
 11. Always aim to provide the most direct path to implementation, avoiding over-engineering or roundabout approaches${research ? '\n12. For each task, include specific, actionable guidance based on current industry standards and best practices discovered through research' : ''}`;
 
 		// Build user prompt with PRD content
-		const userPrompt = `Here's the Product Requirements Document (PRD) to break down into approximately ${numTasks} tasks, starting IDs from ${nextId}:${research ? '\n\nRemember to thoroughly research current best practices and technologies before task breakdown to provide specific, actionable implementation details.' : ''}\n\n${prdContent}\n\n
+		// Add file path marker if CLAUDE_CLI_USE_FILE_REFERENCE is true
+		const useFileReference = process.env.CLAUDE_CLI_USE_FILE_REFERENCE === 'true';
+		
+		const userPrompt = `Here's the Product Requirements Document (PRD) to break down into approximately ${numTasks} tasks, starting IDs from ${nextId}:${research ? '\n\nRemember to thoroughly research current best practices and technologies before task breakdown to provide specific, actionable implementation details.' : ''}
+		
+${useFileReference ? `PRD_FILE_PATH: ${prdPath}\n` : ''}
+Product Requirements Document (PRD) Content:
+${prdContent}
+
 
 		Return your response in this format:
 {
@@ -227,8 +236,8 @@ Guidelines:
 			'info'
 		);
 
-		// Call generateObjectService with the CORRECT schema and additional telemetry params
-		aiServiceResponse = await generateObjectService({
+		// Call generateObjectWithFallback to support claude-cli provider
+		aiServiceResponse = await generateObjectWithFallback({
 			role: research ? 'research' : 'main', // Use research role if flag is set
 			session: session,
 			projectRoot: projectRoot,

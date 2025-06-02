@@ -474,8 +474,9 @@ function getParametersForRole(role, explicitRoot = null) {
  */
 function isApiKeySet(providerName, session = null, projectRoot = null) {
 	// Define the expected environment variable name for each provider
-	if (providerName?.toLowerCase() === 'ollama') {
-		return true; // Indicate key status is effectively "OK"
+	const providerLower = providerName?.toLowerCase();
+	if (providerLower === 'ollama' || providerLower === 'claude-cli') {
+		return true; // Indicate key status is effectively "OK" for providers that don't need keys
 	}
 
 	const keyMap = {
