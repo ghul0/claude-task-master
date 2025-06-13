@@ -1,0 +1,109 @@
+# Claude Code Configuration - Example .clauderc
+# This file demonstrates all available configuration options
+
+# ============================================
+# Basic Configuration
+# ============================================
+
+# Command path - auto-detected if not specified
+# Uncomment and modify if claude is not in your PATH
+# command=/usr/local/bin/claude
+# command="/Applications/Claude Code.app/Contents/MacOS/claude"
+
+# Default model - used when no model is specified
+model=sonnet
+
+# ============================================
+# Model Aliases - Quick model switching
+# ============================================
+
+# Short names for models (Claude Code uses simplified model names)
+alias opus="--model opus"
+alias sonnet="--model sonnet"  
+alias haiku="--model haiku"
+
+# ============================================
+# Model Selection Presets
+# ============================================
+
+# Quick model switching
+alias fast="--model haiku"
+alias balanced="--model sonnet"
+alias creative="--model opus"
+alias precise="--model sonnet"
+
+# ============================================
+# Task-Specific Presets
+# ============================================
+
+# Optimized for different types of work
+alias code="--model sonnet"
+alias docs="--model opus"
+alias quick="--model haiku"
+alias review="--model opus"
+alias brainstorm="--model opus"
+
+# ============================================
+# Development Shortcuts
+# ============================================
+
+# Logging and debugging (if supported by Claude Code)
+alias debug="--verbose"
+alias quiet="-p"  # Print mode only
+alias trace="--verbose"
+
+# MCP (Model Context Protocol) configurations
+alias mcp-full="--mcp-config ~/.claude/mcp.json"
+alias mcp-read="--mcp-config ~/.claude/mcp.json --allowedTools 'Read,Grep,Glob'"
+alias mcp-write="--mcp-config ~/.claude/mcp.json --allowedTools 'Read,Write,Edit'"
+
+# ============================================
+# Project-Specific Configurations
+# ============================================
+
+# Example project aliases (customize for your projects)
+alias project1="--model opus"
+alias project2="--model sonnet"
+
+# Task Master specific
+alias tm-dev="--model sonnet"
+alias tm-test="--model haiku"
+alias tm-docs="--model opus"
+
+# ============================================
+# Environment Variables
+# ============================================
+
+# Timeout settings (in milliseconds)
+export CLAUDE_CODE_TIMEOUT=300000  # 5 minutes
+
+# File reference mode for large inputs
+export CLAUDE_CODE_USE_FILE_REFERENCE=false
+
+# Custom environment variables for your workflow
+# export MY_CLAUDE_SETTING=value
+
+# ============================================
+# Advanced Combinations
+# ============================================
+
+# You can combine aliases in commands:
+# taskmaster parse-prd --provider claude-code --model fast
+# taskmaster add-task "Fix bug" --provider claude-code --model code
+# taskmaster update-task 5 --provider claude-code --model review
+
+# ============================================
+# Tips and Tricks
+# ============================================
+
+# 1. Aliases are expanded left-to-right in commands
+# 2. Environment variables can use $HOME, $USER, etc.
+# 3. Comments start with # and can be on their own line
+# 4. Line continuations work with \ at end of line
+# 5. Both single and double quotes are supported
+# 6. Create project-specific .clauderc files in project roots
+
+# Example of line continuation:
+alias complex="--model opus \
+               --mcp-config ~/.claude/mcp.json \
+               --allowedTools 'Read,Write,Edit'"

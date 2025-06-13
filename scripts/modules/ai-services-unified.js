@@ -27,6 +27,7 @@ import {
 	getVertexLocation
 } from './config-manager.js';
 import { log, findProjectRoot, resolveEnvVariable } from './utils.js';
+import { PROVIDERS_WITHOUT_API_KEY } from '../../src/constants/providers.js';
 
 // Import provider classes
 import {
@@ -40,7 +41,7 @@ import {
 	BedrockAIProvider,
 	AzureProvider,
 	VertexAIProvider,
-	ClaudeCliAIProvider
+	ClaudeCodeAIProvider
 } from '../../src/ai-providers/index.js';
 
 // Create provider instances
@@ -55,7 +56,7 @@ const PROVIDERS = {
 	bedrock: new BedrockAIProvider(),
 	azure: new AzureProvider(),
 	vertex: new VertexAIProvider(),
-	'claude-cli': new ClaudeCliAIProvider()
+	'claude-code': new ClaudeCodeAIProvider()
 };
 
 // Helper function to get cost for a specific model
@@ -175,7 +176,7 @@ function _resolveApiKey(providerName, session, projectRoot = null) {
 		ollama: 'OLLAMA_API_KEY',
 		bedrock: 'AWS_ACCESS_KEY_ID',
 		vertex: 'GOOGLE_API_KEY',
-		'claude-cli': null // Claude CLI doesn't need an API key
+		'claude-code': null // Claude Code doesn't require an API key
 	};
 
 	const envVarName = keyMap[providerName];
@@ -185,24 +186,29 @@ function _resolveApiKey(providerName, session, projectRoot = null) {
 		);
 	}
 
-	// Special handling for providers that don't need API keys
+	// For providers that don't need API keys (null in keyMap)
 	if (envVarName === null) {
-		return null; // Claude CLI and similar providers
+		return null;
 	}
 
 	const apiKey = resolveEnvVariable(envVarName, session, projectRoot);
 
+	// Check if provider requires API key validation
+	if (!PROVIDERS_WITHOUT_API_KEY.includes(providerName)) {
+		if (!apiKey) {
+			throw new Error(
+				`Required API key ${envVarName} for provider '${providerName}' is not set in environment, session, or .env file.`
+			);
+		}
+	}
+
 	// Special handling for providers that can use alternative auth
-	if (providerName === 'ollama' || providerName === 'bedrock') {
+	if (providerName === 'bedrock') {
 		return apiKey || null;
 	}
 
-	if (!apiKey) {
-		throw new Error(
-			`Required API key ${envVarName} for provider '${providerName}' is not set in environment, session, or .env file.`
-		);
-	}
-	return apiKey;
+	// Return the API key (which may be null for providers that don't need it)
+	return apiKey || null;
 }
 
 /**
@@ -394,29 +400,8 @@ async function _unifiedServiceRunner(serviceType, params) {
 
 			const providerLower = providerName?.toLowerCase();
 
-			// Check if claude-cli is available (only when CLAUDE_CLI_COMMAND is set)
-			if (providerLower === 'claude-cli') {
-				const claudeCliCommand = resolveEnvVariable(
-					'CLAUDE_CLI_COMMAND',
-					session,
-					effectiveProjectRoot
-				);
-				if (!claudeCliCommand) {
-					log(
-						'warn',
-						`Skipping role '${currentRole}' (Provider: claude-cli): Claude CLI is not configured. Set CLAUDE_CLI_COMMAND to use.`
-					);
-					lastError =
-						lastError ||
-						new Error(
-							`Claude CLI provider is not configured. Set CLAUDE_CLI_COMMAND environment variable (e.g., CLAUDE_CLI_COMMAND=claude).`
-						);
-					continue; // Skip to the next role in the sequence
-				}
-			}
-
 			// Check API key if needed
-			if (providerLower !== 'ollama' && providerLower !== 'claude-cli') {
+			if (!PROVIDERS_WITHOUT_API_KEY.includes(providerLower)) {
 				if (!isApiKeySet(providerName, session, effectiveProjectRoot)) {
 					log(
 						'warn',

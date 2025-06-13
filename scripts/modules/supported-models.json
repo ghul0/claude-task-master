@@ -424,10 +424,40 @@
 			"max_tokens": 32768
 		}
 	],
-	"claude-cli": [
+	"claude-code": [
 		{
 			"id": "claude-local",
 			"swe_score": 99,
+			"cost_per_1m_tokens": { "input": 0, "output": 0 },
+			"allowed_roles": ["main", "research", "fallback"],
+			"max_tokens": 200000,
+			"description": "Claude Code local instance - uses your Claude subscription",
+			"notes": "Model can be configured via CLAUDE_CODE_MODEL env var or params.modelId. Supports aliases: 'opus' and 'sonnet'"
+		},
+		{
+			"id": "claude-sonnet-4-20250514",
+			"swe_score": 72.7,
+			"cost_per_1m_tokens": { "input": 0, "output": 0 },
+			"allowed_roles": ["main", "research", "fallback"],
+			"max_tokens": 200000
+		},
+		{
+			"id": "claude-opus-4-20250514",
+			"swe_score": 72.5,
+			"cost_per_1m_tokens": { "input": 0, "output": 0 },
+			"allowed_roles": ["main", "research", "fallback"],
+			"max_tokens": 200000
+		},
+		{
+			"id": "claude-3-7-sonnet-20250219",
+			"swe_score": 62.3,
+			"cost_per_1m_tokens": { "input": 0, "output": 0 },
+			"allowed_roles": ["main", "research", "fallback"],
+			"max_tokens": 200000
+		},
+		{
+			"id": "claude-3-5-sonnet-20241022",
+			"swe_score": 49,
 			"cost_per_1m_tokens": { "input": 0, "output": 0 },
 			"allowed_roles": ["main", "research", "fallback"],
 			"max_tokens": 200000
