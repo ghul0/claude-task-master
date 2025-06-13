@@ -450,7 +450,14 @@ async function setModel(role, modelId, options = {}) {
 						openRouterModels.some((m) => m.id === modelId)
 					) {
 						determinedProvider = 'openrouter';
-						warningMessage = `Warning: Custom OpenRouter model '${modelId}' set. This model is not officially validated by Taskmaster and may not function as expected.`;
+
+						// Check if this is a free model (ends with :free)
+						if (modelId.endsWith(':free')) {
+							warningMessage = `Warning: OpenRouter free model '${modelId}' selected. Free models have significant limitations including lower context windows, reduced rate limits, and may not support advanced features like tool_use. Consider using the paid version '${modelId.replace(':free', '')}' for full functionality.`;
+						} else {
+							warningMessage = `Warning: Custom OpenRouter model '${modelId}' set. This model is not officially validated by Taskmaster and may not function as expected.`;
+						}
+
 						report('warn', warningMessage);
 					} else {
 						// Hinted as OpenRouter but not found in live check
@@ -482,6 +489,11 @@ async function setModel(role, modelId, options = {}) {
 							`Model ID "${modelId}" not found in the Ollama instance. Please verify the model is pulled and available. You can check available models with: curl ${tagsUrl}`
 						);
 					}
+				} else if (providerHint === 'bedrock') {
+					// Set provider without model validation since Bedrock models are managed by AWS
+					determinedProvider = 'bedrock';
+					warningMessage = `Warning: Custom Bedrock model '${modelId}' set. Please ensure the model ID is valid and accessible in your AWS account.`;
+					report('warn', warningMessage);
 				} else {
 					// Invalid provider hint - should not happen
 					throw new Error(`Invalid provider hint received: ${providerHint}`);

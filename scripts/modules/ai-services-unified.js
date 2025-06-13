@@ -22,6 +22,7 @@ import {
 	isApiKeySet,
 	getOllamaBaseURL,
 	getAzureBaseURL,
+	getBedrockBaseURL,
 	getVertexProjectId,
 	getVertexLocation
 } from './config-manager.js';
@@ -438,6 +439,10 @@ async function _unifiedServiceRunner(serviceType, params) {
 				// For Ollama, use the global Ollama base URL if role-specific URL is not configured
 				baseURL = getOllamaBaseURL(effectiveProjectRoot);
 				log('debug', `Using global Ollama base URL: ${baseURL}`);
+			} else if (providerName?.toLowerCase() === 'bedrock' && !baseURL) {
+				// For Bedrock, use the global Bedrock base URL if role-specific URL is not configured
+				baseURL = getBedrockBaseURL(effectiveProjectRoot);
+				log('debug', `Using global Bedrock base URL: ${baseURL}`);
 			}
 
 			// Get AI parameters for the current role
@@ -600,7 +605,8 @@ async function _unifiedServiceRunner(serviceType, params) {
 					lowerCaseMessage.includes('does not support tool_use') ||
 					lowerCaseMessage.includes('tool use is not supported') ||
 					lowerCaseMessage.includes('tools are not supported') ||
-					lowerCaseMessage.includes('function calling is not supported')
+					lowerCaseMessage.includes('function calling is not supported') ||
+					lowerCaseMessage.includes('tool use is not supported')
 				) {
 					const specificErrorMsg = `Model '${modelId || 'unknown'}' via provider '${providerName || 'unknown'}' does not support the 'tool use' required by generateObjectService. Please configure a model that supports tool/function calling for the '${currentRole}' role, or use generateTextService if structured output is not strictly required.`;
 					log('error', `[Tool Support Error] ${specificErrorMsg}`);
