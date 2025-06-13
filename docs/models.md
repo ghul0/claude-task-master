@@ -29,6 +29,11 @@
 | perplexity | sonar-reasoning                                | 0.211     | 1          | 5           |
 | xai        | grok-3                                         | —         | 3          | 15          |
 | xai        | grok-3-fast                                    | —         | 5          | 25          |
+| claude-code | claude-local                                   | —         | 0          | 0           |
+| claude-code | claude-sonnet-4-20250514                       | 0.727     | 0          | 0           |
+| claude-code | claude-opus-4-20250514                         | 0.725     | 0          | 0           |
+| claude-code | claude-3-7-sonnet-20250219                     | 0.623     | 0          | 0           |
+| claude-code | claude-3-5-sonnet-20241022                     | 0.49      | 0          | 0           |
 | ollama     | devstral:latest                                | —         | 0          | 0           |
 | ollama     | qwen3:latest                                   | —         | 0          | 0           |
 | ollama     | qwen3:14b                                      | —         | 0          | 0           |
@@ -75,6 +80,11 @@
 | perplexity | sonar-reasoning            | 0.211     | 1          | 5           |
 | xai        | grok-3                     | —         | 3          | 15          |
 | xai        | grok-3-fast                | —         | 5          | 25          |
+| claude-code | claude-local               | —         | 0          | 0           |
+| claude-code | claude-sonnet-4-20250514   | 0.727     | 0          | 0           |
+| claude-code | claude-opus-4-20250514     | 0.725     | 0          | 0           |
+| claude-code | claude-3-7-sonnet-20250219 | 0.623     | 0          | 0           |
+| claude-code | claude-3-5-sonnet-20241022 | 0.49      | 0          | 0           |
 
 ## Fallback Models
 
@@ -96,6 +106,11 @@
 | perplexity | sonar-reasoning                                | 0.211     | 1          | 5           |
 | xai        | grok-3                                         | —         | 3          | 15          |
 | xai        | grok-3-fast                                    | —         | 5          | 25          |
+| claude-code | claude-local                                   | —         | 0          | 0           |
+| claude-code | claude-sonnet-4-20250514                       | 0.727     | 0          | 0           |
+| claude-code | claude-opus-4-20250514                         | 0.725     | 0          | 0           |
+| claude-code | claude-3-7-sonnet-20250219                     | 0.623     | 0          | 0           |
+| claude-code | claude-3-5-sonnet-20241022                     | 0.49      | 0          | 0           |
 | ollama     | devstral:latest                                | —         | 0          | 0           |
 | ollama     | qwen3:latest                                   | —         | 0          | 0           |
 | ollama     | qwen3:14b                                      | —         | 0          | 0           |
