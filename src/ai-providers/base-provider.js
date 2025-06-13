@@ -1,5 +1,6 @@
 import { generateText, streamText, generateObject } from 'ai';
-import { log } from '../../scripts/modules/index.js';
+// Import log directly from utils to avoid circular dependency
+import { log } from '../../scripts/modules/utils.js';
 
 /**
  * Base class for all AI providers
