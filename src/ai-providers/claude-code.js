@@ -40,14 +40,11 @@
 import { BaseAIProvider } from './base-provider.js';
 import { spawn, execSync } from 'child_process';
 import {
-	writeFileSync,
-	unlinkSync,
 	accessSync,
 	constants,
-	existsSync,
-	createReadStream
+	existsSync
 } from 'fs';
-import { tmpdir, platform, homedir } from 'os';
+import { platform, homedir } from 'os';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
 import {
@@ -713,7 +710,7 @@ export class ClaudeCodeAIProvider extends BaseAIProvider {
 	 * Executes the Claude Code command with the given input
 	 *
 	 * This method handles the low-level execution of the Claude Code command,
-	 * including temporary file creation, command validation, and timeout handling.
+	 * including direct stdin/stdout communication, command validation, and timeout handling.
 	 *
 	 * @param {string} input - The formatted prompt text to send to Claude
 	 * @param {object} [options={}] - Optional execution options
@@ -728,10 +725,9 @@ export class ClaudeCodeAIProvider extends BaseAIProvider {
 	 * 2. Validates the Claude Code command exists and is executable
 	 * 3. Handles file reference mode for large PRDs if enabled
 	 * 4. Adds -p flag for print mode if not present
-	 * 5. Creates a temporary file with the prompt
-	 * 6. Executes the command with input redirection
+	 * 5. Writes input directly to stdin without temporary files
+	 * 6. Executes the command with direct stdin/stdout communication
 	 * 7. Implements 5-minute timeout for long-running requests
-	 * 8. Cleans up the temporary file
 	 *
 	 * Environment variables:
 	 * - CLAUDE_CODE_COMMAND: The Claude Code command to execute
@@ -751,7 +747,6 @@ export class ClaudeCodeAIProvider extends BaseAIProvider {
 		}
 
 		const parsedCommand = this.getClaudeCommandParsed(options);
-		let tempFile;
 
 		try {
 			if (!parsedCommand) {
@@ -803,9 +798,6 @@ export class ClaudeCodeAIProvider extends BaseAIProvider {
 				);
 			}
 
-			// Create a temporary file for the prompt
-			tempFile = join(tmpdir(), `claude-prompt-${Date.now()}.txt`);
-			writeFileSync(tempFile, actualInput, 'utf8');
 
 			// Execute the command using spawn for better security
 			return new Promise((resolve, reject) => {
@@ -823,9 +815,9 @@ export class ClaudeCodeAIProvider extends BaseAIProvider {
 					5 * 60 * 1000
 				);
 
-				// Read from temp file and pipe to stdin
-				const readStream = createReadStream(tempFile);
-				readStream.pipe(child.stdin);
+				// Write input directly to stdin
+				child.stdin.write(actualInput, 'utf8');
+				child.stdin.end();
 
 				child.stdout.on('data', (data) => {
 					stdout += data.toString();
@@ -853,15 +845,6 @@ export class ClaudeCodeAIProvider extends BaseAIProvider {
 			});
 		} catch (error) {
 			throw error;
-		} finally {
-			// Clean up temp file
-			if (tempFile) {
-				try {
-					unlinkSync(tempFile);
-				} catch (e) {
-					// Ignore cleanup errors
-				}
-			}
 		}
 	}
 
