@@ -47,6 +47,7 @@ import {
 import { platform, homedir } from 'os';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
+import { createInterface } from 'readline';
 import {
 	loadClaudeRC,
 	getEffectiveConfig,
@@ -93,18 +94,31 @@ export class ClaudeCodeAIProvider extends BaseAIProvider {
 	 * @constructor
 	 * @description Initializes the provider with:
 	 * - Name: 'Claude Code'
-	 * - Streaming support: false (not supported by CLI)
+	 * - Streaming support: true (now supported via readline)
 	 * - Object generation: true (via JSON prompting)
 	 * - Command detection cache: undefined (lazy detection)
 	 */
 	constructor() {
 		super();
 		this.name = 'Claude Code';
-		this.supportsStreaming = false; // Claude Code doesn't support streaming
+		this.supportsStreaming = true; // Claude Code now supports streaming
 		this.supportsObjectGeneration = true; // We can support this through JSON prompting
 		this._detectedCommand = undefined; // Use undefined for "not attempted yet"
 		this._rcConfig = null; // Cache for RC configuration
 		this._rcConfigLoaded = false; // Flag to track if we've attempted to load
+		
+		// Streaming configuration with enhanced error recovery
+		this.streamingConfig = {
+			largeResponseThreshold: 1000, // Characters threshold for auto-streaming
+			streamTimeout: 5 * 60 * 1000, // 5 minutes
+			enableStreaming: true, // Enable streaming by default
+			maxRetries: 3, // Maximum number of retry attempts
+			retryDelay: 1000, // Initial delay between retries (ms)
+			retryBackoff: 2, // Exponential backoff multiplier
+			fallbackToNonStreaming: true, // Fallback to non-streaming on repeated failures
+			healthCheckInterval: 30000, // Health check every 30 seconds
+			autoRecovery: true // Automatically recover from stream errors
+		};
 	}
 
 	/**
@@ -618,16 +632,106 @@ export class ClaudeCodeAIProvider extends BaseAIProvider {
 	}
 
 	/**
-	 * Streaming is not supported by Claude Code
-	 *
-	 * @param {object} params - Parameters for text streaming (unused)
-	 * @throws {Error} Always throws error as streaming is not supported
-	 * @override
+	 * Creates a readline interface for streaming output from child process
+	 * 
+	 * @param {ChildProcess} child - The child process to read from
+	 * @returns {readline.Interface} Readline interface for line-by-line reading
+	 * @private
 	 */
-	async streamText(params) {
-		throw new Error(
-			'Streaming is not supported by Claude Code provider. Use generateText instead.'
-		);
+	createStreamInterface(child) {
+		return createInterface({
+			input: child.stdout,
+			crlfDelay: Infinity
+		});
+	}
+
+	/**
+	 * Streams text generation from Claude Code
+	 *
+	 * @param {object} params - Parameters for text streaming
+	 * @param {Array<object>} params.messages - Array of message objects with role and content
+	 * @param {string} params.messages[].role - Message role: 'system', 'user', or 'assistant'
+	 * @param {string} params.messages[].content - Message content
+	 * @param {string} [params.modelId] - Model ID or alias ('opus', 'sonnet') to use
+	 * @param {AbortSignal} [params.signal] - Abort signal for cancellation
+	 * @returns {AsyncGenerator<string>} Async generator yielding text chunks
+	 * @throws {Error} If messages array is empty or command execution fails
+	 * 
+	 * @example
+	 * const stream = provider.streamText({
+	 *   messages: [{ role: 'user', content: 'Write a story' }]
+	 * });
+	 * 
+	 * for await (const chunk of stream) {
+	 *   process.stdout.write(chunk);
+	 * }
+	 */
+	async *streamText(params) {
+		const { messages, modelId, signal } = params;
+
+		if (!messages || messages.length === 0) {
+			throw new Error('Messages array is required for text streaming.');
+		}
+
+		// Format messages into a prompt
+		let prompt = messages
+			.map((msg) => {
+				if (msg.role === 'system') {
+					return `System: ${msg.content}`;
+				} else if (msg.role === 'user') {
+					return `Human: ${msg.content}`;
+				} else if (msg.role === 'assistant') {
+					return `Assistant: ${msg.content}`;
+				}
+				return '';
+			})
+			.join('\n\n');
+
+		// Add final prompt for assistant
+		if (messages[messages.length - 1].role !== 'assistant') {
+			prompt += '\n\nAssistant:';
+		}
+
+		// Attempt streaming with retry logic
+		let retryCount = 0;
+		let lastError = null;
+		
+		while (retryCount <= this.streamingConfig.maxRetries) {
+			try {
+				// Stream Claude Code output
+				yield* this.streamClaudeCodeWithRecovery(prompt, { modelId, signal });
+				return; // Success, exit the retry loop
+			} catch (error) {
+				lastError = error;
+				retryCount++;
+				
+				// Log the error for debugging
+				console.error(`Stream attempt ${retryCount} failed:`, error.message);
+				
+				// Check if we should retry
+				if (retryCount > this.streamingConfig.maxRetries) {
+					// Max retries exceeded
+					if (this.streamingConfig.fallbackToNonStreaming) {
+						console.warn('Streaming failed, falling back to non-streaming mode...');
+						try {
+							// Fallback to non-streaming
+							const result = await this.generateText(params);
+							yield result.text;
+							return;
+						} catch (fallbackError) {
+							throw new Error(`Streaming failed and fallback failed: ${fallbackError.message}`);
+						}
+					} else {
+						throw new Error(`Streaming failed after ${this.streamingConfig.maxRetries} attempts: ${lastError.message}`);
+					}
+				}
+				
+				// Wait before retrying with exponential backoff
+				const delay = this.streamingConfig.retryDelay * Math.pow(this.streamingConfig.retryBackoff, retryCount - 1);
+				console.log(`Retrying in ${delay}ms...`);
+				await new Promise(resolve => setTimeout(resolve, delay));
+			}
+		}
 	}
 
 	/**
@@ -703,6 +807,233 @@ export class ClaudeCodeAIProvider extends BaseAIProvider {
 			}
 		} catch (error) {
 			this.handleError('object generation', error);
+		}
+	}
+
+	/**
+	 * Streams output from Claude Code with automatic error recovery
+	 * 
+	 * @param {string} input - The formatted prompt text to send to Claude
+	 * @param {object} [options={}] - Optional execution options
+	 * @param {string} [options.modelId] - Model ID or alias to use with --model flag
+	 * @param {AbortSignal} [options.signal] - Abort signal for cancellation
+	 * @returns {AsyncGenerator<string>} Async generator yielding text chunks
+	 * @throws {Error} If command is not set, not found, or recovery fails
+	 * @private
+	 */
+	async *streamClaudeCodeWithRecovery(input, options = {}) {
+		let buffer = [];
+		let lastYieldPosition = 0;
+		
+		try {
+			// Attempt to stream with recovery tracking
+			const generator = this.streamClaudeCode(input, options);
+			
+			for await (const chunk of generator) {
+				buffer.push(chunk);
+				yield chunk;
+				lastYieldPosition = buffer.length;
+			}
+		} catch (error) {
+			// Check if we can recover
+			if (this.streamingConfig.autoRecovery && this.isRecoverableError(error)) {
+				console.warn('Stream interrupted, attempting recovery...');
+				
+				// Calculate what we've already sent
+				const sentText = buffer.slice(0, lastYieldPosition).join('');
+				const remainingPrompt = this.createContinuationPrompt(input, sentText);
+				
+				// Attempt to continue from where we left off
+				try {
+					const recoveryGenerator = this.streamClaudeCode(remainingPrompt, options);
+					
+					for await (const chunk of recoveryGenerator) {
+						yield chunk;
+					}
+				} catch (recoveryError) {
+					throw new Error(`Stream recovery failed: ${recoveryError.message}`);
+				}
+			} else {
+				throw error;
+			}
+		}
+	}
+
+	/**
+	 * Checks if an error is recoverable for streaming
+	 * 
+	 * @param {Error} error - The error to check
+	 * @returns {boolean} True if the error is recoverable
+	 * @private
+	 */
+	isRecoverableError(error) {
+		const recoverablePatterns = [
+			'ETIMEDOUT',
+			'ECONNRESET',
+			'EPIPE',
+			'stream',
+			'timeout',
+			'abort'
+		];
+		
+		const errorMessage = error.message.toLowerCase();
+		return recoverablePatterns.some(pattern => errorMessage.includes(pattern.toLowerCase()));
+	}
+
+	/**
+	 * Creates a continuation prompt for recovery
+	 * 
+	 * @param {string} originalPrompt - The original prompt
+	 * @param {string} partialResponse - The partial response received so far
+	 * @returns {string} A continuation prompt
+	 * @private
+	 */
+	createContinuationPrompt(originalPrompt, partialResponse) {
+		return `${originalPrompt}\n\n[Previous partial response: ${partialResponse}]\n\nPlease continue from where you left off:`;
+	}
+
+	/**
+	 * Streams output from Claude Code command execution
+	 * 
+	 * @param {string} input - The formatted prompt text to send to Claude
+	 * @param {object} [options={}] - Optional execution options
+	 * @param {string} [options.modelId] - Model ID or alias to use with --model flag
+	 * @param {AbortSignal} [options.signal] - Abort signal for cancellation
+	 * @returns {AsyncGenerator<string>} Async generator yielding text chunks
+	 * @throws {Error} If command is not set, not found, times out, or returns error
+	 * @private
+	 */
+	async *streamClaudeCode(input, options = {}) {
+		// Apply any environment variables from RC config
+		const rcConfig = this.getRCConfig();
+		if (rcConfig?.environment) {
+			// Apply RC config environment variables (they don't override existing ones)
+			for (const [key, value] of Object.entries(rcConfig.environment)) {
+				if (!process.env[key]) {
+					process.env[key] = value;
+				}
+			}
+		}
+
+		const parsedCommand = this.getClaudeCommandParsed(options);
+
+		if (!parsedCommand) {
+			throw new Error(
+				'Claude Code not found. Please install Claude Code:\n' +
+					'  - Download from: https://claude.ai/code\n' +
+					'  - Install via npm: npm install -g @anthropic-ai/claude-code\n' +
+					'  - Or set CLAUDE_CODE_COMMAND environment variable\n' +
+					'  - Or create a .clauderc file with your configuration\n' +
+					'  - Example: export CLAUDE_CODE_COMMAND="/path/to/claude"'
+			);
+		}
+
+		// Check if we should use file reference mode
+		const useFileReference =
+			process.env.CLAUDE_CODE_USE_FILE_REFERENCE === 'true';
+
+		// Check if input contains file path marker
+		let actualInput = input;
+		if (useFileReference) {
+			// Check if the input contains a file path reference
+			const filePathMatch = input.match(/FILE_PATH:\s*(.+?)(?:\n|$)/);
+			if (filePathMatch) {
+				const filePath = filePathMatch[1].trim();
+				// Replace the PRD content with a file reference
+				actualInput = input.replace(
+					/Product Requirements Document \(PRD\) Content:[\s\S]*?(?=\n\nIMPORTANT:|$)/,
+					`Product Requirements Document (PRD) Content:\n<Please read the PRD from this file: ${filePath}>`
+				);
+			}
+		}
+
+		// Use the already parsed command components
+		const { executable: claudePath, args: parsedArgs } = parsedCommand;
+		let args = [...parsedArgs];
+
+		// Add -p flag if not already present (required for piped input)
+		if (!args.includes('-p') && !args.includes('--print')) {
+			args.unshift('-p');
+		}
+
+		// Validate the command exists and is executable
+		try {
+			accessSync(claudePath, constants.F_OK | constants.X_OK);
+		} catch (error) {
+			throw new Error(
+				`Claude Code not found or not executable at: ${claudePath}. Please check your CLAUDE_CODE_COMMAND environment variable.`
+			);
+		}
+
+		// Execute the command using spawn
+		const child = spawn(claudePath, args, {
+			stdio: ['pipe', 'pipe', 'pipe']
+		});
+
+		// Setup timeout
+		const timeout = setTimeout(() => {
+			child.kill('SIGTERM');
+		}, this.streamingConfig.streamTimeout);
+
+		// Setup abort signal handling
+		if (options.signal) {
+			options.signal.addEventListener('abort', () => {
+				clearTimeout(timeout);
+				child.kill('SIGTERM');
+			}, { once: true });
+		}
+
+		// Write input to stdin
+		child.stdin.write(actualInput, 'utf8');
+		child.stdin.end();
+
+		// Create readline interface for streaming
+		const rl = this.createStreamInterface(child);
+		
+		// Buffer for accumulating partial lines
+		let lineBuffer = '';
+		let errorBuffer = '';
+
+		// Handle stderr
+		child.stderr.on('data', (data) => {
+			errorBuffer += data.toString();
+		});
+
+		// Handle process errors
+		child.on('error', (error) => {
+			clearTimeout(timeout);
+			throw error;
+		});
+
+		try {
+			// Stream lines as they arrive
+			for await (const line of rl) {
+				// Yield each line with a newline to preserve formatting
+				yield line + '\n';
+			}
+
+			// Wait for process to complete
+			await new Promise((resolve, reject) => {
+				child.on('close', (code) => {
+					clearTimeout(timeout);
+					if (code !== 0) {
+						reject(new Error(`Claude Code error (code ${code}): ${errorBuffer}`));
+					} else if (errorBuffer && !lineBuffer) {
+						reject(new Error(`Claude Code error: ${errorBuffer}`));
+					} else {
+						resolve();
+					}
+				});
+			});
+		} catch (error) {
+			clearTimeout(timeout);
+			throw error;
+		} finally {
+			// Ensure cleanup
+			rl.close();
+			if (!child.killed) {
+				child.kill('SIGTERM');
+			}
 		}
 	}
 
@@ -1030,5 +1361,118 @@ export class ClaudeCodeAIProvider extends BaseAIProvider {
 	 */
 	async checkSetup(params = {}) {
 		return this.validate(params);
+	}
+
+	/**
+	 * Performs a health check on the streaming functionality
+	 * 
+	 * @returns {Promise<{healthy: boolean, latency: number, error?: string}>} Health check result
+	 */
+	async checkStreamingHealth() {
+		const startTime = Date.now();
+		
+		try {
+			// Simple test stream
+			const testStream = this.streamText({
+				messages: [{ role: 'user', content: 'Reply with just "OK"' }]
+			});
+			
+			let received = false;
+			const timeout = setTimeout(() => {
+				if (!received) {
+					throw new Error('Health check timeout');
+				}
+			}, 10000); // 10 second timeout
+			
+			for await (const chunk of testStream) {
+				received = true;
+				clearTimeout(timeout);
+				break; // Just need first chunk
+			}
+			
+			const latency = Date.now() - startTime;
+			return { healthy: true, latency };
+		} catch (error) {
+			const latency = Date.now() - startTime;
+			return { 
+				healthy: false, 
+				latency,
+				error: error.message 
+			};
+		}
+	}
+
+	/**
+	 * Monitors streaming performance and collects metrics
+	 * 
+	 * @param {AsyncGenerator} stream - The stream to monitor
+	 * @returns {AsyncGenerator} Monitored stream with metrics collection
+	 */
+	async *monitorStream(stream) {
+		const metrics = {
+			startTime: Date.now(),
+			firstChunkTime: null,
+			lastChunkTime: null,
+			chunkCount: 0,
+			totalBytes: 0,
+			errors: []
+		};
+		
+		try {
+			for await (const chunk of stream) {
+				if (!metrics.firstChunkTime) {
+					metrics.firstChunkTime = Date.now();
+					metrics.timeToFirstByte = metrics.firstChunkTime - metrics.startTime;
+				}
+				
+				metrics.lastChunkTime = Date.now();
+				metrics.chunkCount++;
+				metrics.totalBytes += chunk.length;
+				
+				yield chunk;
+			}
+		} catch (error) {
+			metrics.errors.push({
+				time: Date.now(),
+				message: error.message
+			});
+			throw error;
+		} finally {
+			metrics.endTime = Date.now();
+			metrics.totalTime = metrics.endTime - metrics.startTime;
+			metrics.throughput = metrics.totalBytes / (metrics.totalTime / 1000); // bytes per second
+			
+			// Log metrics if debug mode
+			if (process.env.CLAUDE_CODE_DEBUG === 'true') {
+				console.log('Stream metrics:', JSON.stringify(metrics, null, 2));
+			}
+		}
+	}
+
+	/**
+	 * Creates a stream with automatic timeout handling
+	 * 
+	 * @param {object} params - Streaming parameters
+	 * @param {number} [timeout] - Custom timeout in milliseconds
+	 * @returns {AsyncGenerator} Stream with timeout protection
+	 */
+	async *createTimeoutStream(params, timeout = null) {
+		const effectiveTimeout = timeout || this.streamingConfig.streamTimeout;
+		const controller = new AbortController();
+		
+		const timeoutId = setTimeout(() => {
+			controller.abort();
+		}, effectiveTimeout);
+		
+		try {
+			const stream = this.streamText({
+				...params,
+				signal: controller.signal
+			});
+			
+			yield* stream;
+		} finally {
+			clearTimeout(timeoutId);
+		}
 	}
 }
